@@ -8,6 +8,7 @@ format:
 
 ```{r message=FALSE}
 library(tidyverse)
+library(dplyr)
 ```
 
 ## Warm-up: Examining CO2 trends in R
@@ -58,6 +59,7 @@ ggplot(co2, aes(x = decimal_date, y = monthly_average, group = month, color = fa
 How does CO2 vary within a year? What month is it at max? Min? What might explain this sub-annual pattern? (you will need to write code and make a plot to answer this question)
 
 **Answer 2:**
+
 CO2 fluctuates throughout the year. It appears to be at max in May and at min in October. I think that the CO2 peaks in May because plants aren't absorbing as much CO2 in the winter months, leaving more atmospheric CO2.
 
 
@@ -79,6 +81,12 @@ Describe the data set to the best of your ability, given the documentation provi
 
 **Answer 3:**
 
+The data is from NASA's Goddard Institute for Space Studies.
+
+Year is an integer and the two other columns are doubles. Year is just year. The annual mean and the lowess smoothing columns are in degrees Celsius.
+
+"Global temperature" refers to the average temperature of the Earth's surface, while "global temperature anomaly" is the difference between the current global temperature and a reference average temperature
+
 **Question 4:**
 
 Construct the necessary R code to import and prepare for plotting the following data set: <https://data.giss.nasa.gov/gistemp/graphs/graph_data/Global_Mean_Estimates_based_on_Land_and_Ocean_Data/graph.txt>
@@ -86,12 +94,33 @@ Construct the necessary R code to import and prepare for plotting the following 
 You'll need to determine the file's delimiter and any comments or skips. You will also need to be sure that you have column names. You will not directly use the code above to read the CO2 data, but that code provides helpful tips for reading the data.
 
 **Answer 4:**
+```{r}
+url <- "https://data.giss.nasa.gov/gistemp/graphs/graph_data/Global_Mean_Estimates_based_on_Land_and_Ocean_Data/graph.txt"
+
+global_temp <- read_table(url,
+                          col_names = c("Year", "No_Smoothing", "Lowess_5"),
+                          col_types = cols(
+                            Year = col_integer(), 
+                            No_Smoothing = col_double(), 
+                            Lowess_5 = col_double()
+                          ),
+                          skip = 5)
+```
 
 **Question 5:**
 
 Plot the trend in global mean temperatures over time. Describe what you see in the plot and how you interpret the patterns you observe.
 
 **Answer 5:**
+```{r}
+ggplot(global_temp, aes(x = Year)) +
+  geom_line(aes(y = No_Smoothing)) +
+  geom_line(aes(y = Lowess_5), color = "blue") +
+  labs(x = "Year", y = "Temperature Anomaly (°C)", 
+       title = "Global Temperature Anomalies")
+```
+
+Global Temperatures increased rapidly starting around 1920.
 
 ## Evaluating the evidence for a "Pause" in warming?
 
@@ -105,24 +134,62 @@ Use a search engine (e.g., Google) or a chat LLM to find out how to calculate a 
 
 **Answer 6:**
 
+I asked chatGPT: Calculate rolling averages in R for this dataset *and then pasted my code from question 4. This is what I got:
+
+```{r}
+install.packages("zoo")
+library(zoo)
+```
+```{r}
+window_size <- 5
+
+global_temp <- global_temp |> 
+  mutate(
+    Rolling_Avg_No_Smoothing = rollapply(No_Smoothing, width = window_size, FUN = mean, align = "center", fill = NA),
+    Rolling_Avg_Lowess_5 = rollapply(Lowess_5, width = window_size, FUN = mean, align = "center", fill = NA)
+  )
+
+head(global_temp)
+
+```
+
 **Question 7:**
 
 -   What is the meaning of "5-year average" vs. "annual average"?
 -   Create a data frame from the annual temperature anomaly data (from Question 4) with three new columns: 5-year running averages, 10-year running averages, and 20-year running averages.
 
 **Answer 7:**
+```{r}
+global_temp <- global_temp |> 
+  mutate(rolling_avg_5 = rollmean(No_Smoothing, k = 5, fill = NA),
+         rolling_avg_10 = rollmean(No_Smoothing, k = 10, fill = NA),
+         rolling_avg_20 = rollmean(No_Smoothing, k = 20, fill = NA))
+```
 
 **Question 8:**
 
 Plot the different averages on the *same plot* and describe what differences you see and why.
 
 **Answer 8:**
+```{r}
+ggplot(global_temp, aes(x = Year)) +
+  geom_line(aes(y = No_Smoothing)) +
+  geom_line(aes(y = rolling_avg_5), color = "red") +
+  geom_line(aes(y = rolling_avg_10), color = "blue") +
+  geom_line(aes(y = rolling_avg_20), color = "yellow") +
+  labs(x = "Year", y = "Temperature Anomaly (°C)", 
+       title = "Global Temperature Anomalies with Running Averages")
+```
+
+The 20-year running average has less variation than the two other running averages. Data appears smoother when you average in more data. 
 
 **Question 9:**
 
 By examining the data here, what evidence do you find or not find for such a pause?
 
 **Answer 9:**
+
+I think there might be a slight pause around the 1950s and 60s. The averages all started increasing just before 1920, then the increasing stopped for a little bit from about 1950 to 1970.
 
 ## Longer term trends in CO2 Records
 
@@ -164,9 +231,45 @@ Your answer to Question 10 is going to be a mix of code chunks and text that you
 **Answer 10:**
 
 ```{r}
+file <- "vostok.icecore.co2"
 
+vostok_co2 <- read_table(file, 
+                         col_names = c("Depth_m", "Age_Ice_BP", "Age_Air_BP", "CO2_ppm"),
+                         col_types = cols(
+                           Depth_m = col_double(), 
+                           Age_Ice_BP = col_integer(), 
+                           Age_Air_BP = col_integer(), 
+                           CO2_ppm = col_double()
+                         ),
+                         skip = 21)
 
+vostok_co2 <- vostok_co2 |>  arrange(Age_Air_BP)
 ```
+
+```{r}
+ggplot(vostok_co2, aes(x = Age_Air_BP, y = CO2_ppm)) +
+  geom_line() +
+  labs(x = "Years Before Present", y = "CO2 Concentration (ppm)", 
+       title = "CO2 Concentrations from Ice Core Data (Vostok, Antarctica)")
+```
+
+```{r}
+co2_combined <- bind_rows(
+  vostok_co2 |>  rename(year = Age_Air_BP, co2_ppm = CO2_ppm),
+  co2 |>  select(year, monthly_average) |> rename(co2_ppm = monthly_average)
+)
+
+ggplot(co2_combined, aes(x = year, y = co2_ppm)) +
+  geom_line() +
+  labs(x = "Year", y = "CO2 Concentration (ppm)", 
+       title = "CO2 Concentrations Over Time: Ice Core vs. Modern")
+```
+
+The dataset shows CO2 levels from ice samples taken in Vostok, Antarctica. It includes the depth of the ice, the age of the ice and air samples, and the CO2 concentration in parts per million.
+
+The older data has lower detail, while the more recent data is clearer. The older data also has more missing points.
+
+The CO2 levels change very quickly, as shown in the plots. This big jump in CO2 is mostly caused by human activities, especially with the sharp rise in recent years.
 
 # Render and committing
 
